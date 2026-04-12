@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getTokenFromCookie, verifyToken } from "@/lib/auth";
 
+// Store conversion state in memory (in production, use Redis or similar)
+const conversionState = new Map<string, {
+  status: "idle" | "converting" | "done" | "error";
+  totalScenes: number;
+  error?: string;
+}>();
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -30,6 +37,48 @@ export async function POST(
     if (!openaiApiKey) {
       return NextResponse.json({ error: "AI service not configured" }, { status: 500 });
     }
+
+    // Set state to converting
+    conversionState.set(id, { status: "converting", totalScenes: 0 });
+
+    console.log(`🎬 [Convert-Script] Job started for project ${id}`);
+
+    // Delete existing scenes
+    await prisma.scene.deleteMany({ where: { projectId: id } });
+
+    // Update project status
+    await prisma.project.update({
+      where: { id },
+      data: { status: "SCENES_DONE" },
+    });
+
+    // Start background conversion
+    runConversion(id, script, styleAnchorTokens, characters, environments, openaiApiKey, baseUrl);
+
+    console.log(`🚀 [Convert-Script] Job dispatched for project ${id} - AI processing started`);
+
+    return NextResponse.json({
+      message: "Conversion started",
+      status: "converting"
+    });
+
+  } catch (error) {
+    console.error("Convert script error:", error);
+    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
+  }
+}
+
+async function runConversion(
+  id: string,
+  script: string,
+  styleAnchorTokens: string,
+  characters: string,
+  environments: string,
+  openaiApiKey: string,
+  baseUrl: string
+) {
+  try {
+    console.log(`📡 [Convert-Script] Calling AI API for project ${id}`);
 
     const systemPrompt = `Kamu adalah editor video yang mengkonversi skrip narasi menjadi scene manifest JSON.
 KEMBALIKAN HANYA JSON ARRAY. Tanpa penjelasan, tanpa markdown code block, tanpa komentar.`;
@@ -63,6 +112,7 @@ Format output:
 SKRIP:
 ${script}`;
 
+    console.log(`⏳ [Convert-Script] Waiting for AI response...`);
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
@@ -81,13 +131,13 @@ ${script}`;
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error("OpenAI API error:", error);
-      return NextResponse.json({ error: "Failed to convert script to scenes" }, { status: 500 });
+      throw new Error("OpenAI API error");
     }
 
+    console.log(`✅ [Convert-Script] AI response received for project ${id}`);
     const data = await response.json();
     let scenesJson = data.choices[0].message.content;
+    console.log(`📝 [Convert-Script] Parsing JSON response...`);
 
     // Clean up potential markdown code blocks
     scenesJson = scenesJson.replace(/^```json\s*/, "").replace(/```\s*$/, "").trim();
@@ -114,7 +164,7 @@ Kembalikan HANYA JSON yang sudah diperbaiki. Tanpa penjelasan.`
             },
             {
               role: "user",
-              content: `Perbaiki JSON berikut agar menjadi array objek dengan field "text" dan "image". Setiap item harus punya kedua field tersebut, keduanya string non-kosong.\n\nJSON rusak:\n${scenesJson}`
+              content: `Perbaiki JSON berikut agar menjadi array objek dengan field "text" dan "image".\n\nJSON rusak:\n${scenesJson}`
             },
           ],
           max_tokens: 2048,
@@ -128,42 +178,92 @@ Kembalikan HANYA JSON yang sudah diperbaiki. Tanpa penjelasan.`
           const repaired = repairData.choices[0].message.content.replace(/^```json\s*/, "").replace(/```\s*$/, "").trim();
           scenes = JSON.parse(repaired);
         } catch {
-          return NextResponse.json({ error: "Failed to parse scene manifest after repair attempt" }, { status: 500 });
+          throw new Error("Failed to parse scene manifest");
         }
       } else {
-        return NextResponse.json({ error: "Failed to parse scene manifest" }, { status: 500 });
+        throw new Error("Failed to parse scene manifest");
       }
     }
 
-    // Delete existing scenes and create new ones
-    await prisma.scene.deleteMany({ where: { projectId: id } });
+    // Update state with total scenes
+    conversionState.set(id, { status: "converting", totalScenes: scenes.length });
+    console.log(`🎬 [Convert-Script] Starting to create ${scenes.length} scenes for project ${id}`);
 
-    const createdScenes = await Promise.all(
-      scenes.map((scene, index) =>
-        prisma.scene.create({
-          data: {
-            projectId: id,
-            sceneIndex: index,
-            text: scene.text,
-            imagePrompt: scene.image,
-            status: "PENDING",
-          },
-        })
-      )
-    );
+    // Create scenes incrementally with delay
+    for (let i = 0; i < scenes.length; i++) {
+      const scene = scenes[i];
 
-    // Update project status
-    await prisma.project.update({
-      where: { id },
-      data: { status: "SCENES_DONE" },
-    });
+      await prisma.scene.create({
+        data: {
+          projectId: id,
+          sceneIndex: i,
+          text: scene.text,
+          imagePrompt: scene.image,
+          status: "PENDING",
+        },
+      });
 
-    return NextResponse.json({
-      message: "Scenes created successfully",
-      scenes: createdScenes,
-    });
+      console.log(`  ✓ [Convert-Script] Scene ${i + 1}/${scenes.length} created - "${scene.text.substring(0, 50)}..."`);
+      conversionState.set(id, { status: "converting", totalScenes: scenes.length });
+
+      // Small delay to show incremental creation
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    // Mark as done
+    conversionState.set(id, { status: "done", totalScenes: scenes.length });
+    console.log(`🎉 [Convert-Script] Job DONE! All ${scenes.length} scenes created for project ${id}`);
+
   } catch (error) {
-    console.error("Convert script error:", error);
+    console.error(`❌ [Convert-Script] Job FAILED for project ${id}:`, error);
+    conversionState.set(id, { status: "error", totalScenes: 0, error: String(error) });
+  }
+}
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const token = getTokenFromCookie(request.headers.get("cookie"));
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const payload = await verifyToken(token);
+    if (!payload) {
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const { searchParams } = new URL(request.url);
+    const action = searchParams.get("action");
+
+    if (action === "status") {
+      // Get current conversion status
+      const state = conversionState.get(id);
+      const scenes = await prisma.scene.findMany({
+        where: { projectId: id },
+        orderBy: { sceneIndex: "asc" },
+      });
+
+      return NextResponse.json({
+        status: state?.status || "idle",
+        scenes,
+        totalScenes: state?.totalScenes || 0,
+        error: state?.error,
+      });
+    }
+
+    // Default: return current scenes
+    const scenes = await prisma.scene.findMany({
+      where: { projectId: id },
+      orderBy: { sceneIndex: "asc" },
+    });
+
+    return NextResponse.json({ scenes });
+  } catch (error) {
+    console.error("GET convert-script error:", error);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }

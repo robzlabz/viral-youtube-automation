@@ -18,6 +18,9 @@ export async function POST(
     }
 
     const { id } = await params;
+    const body = await request.json();
+    const { type } = body; // 'characters' | 'environments' | 'cameraLanguage' | 'colorPalette' | 'negativeRules'
+
     const project = await prisma.project.findFirst({
       where: { id, userId: payload.userId },
       include: { visualBible: true },
@@ -34,37 +37,77 @@ export async function POST(
       return NextResponse.json({ error: "AI service not configured" }, { status: 500 });
     }
 
-    const systemPrompt = `Kamu adalah art director dan character designer untuk produksi video animasi.
-Kembalikan HANYA JSON. Tanpa penjelasan, tanpa markdown code block.`;
+    let systemPrompt = "";
+    let userPrompt = "";
+    let updateData: any = {};
 
-    const userPrompt = `Berdasarkan judul video "${project.title}", buat visual bible.
+    switch (type) {
+      case "characters":
+        systemPrompt = `Kamu adalah character designer untuk video animasi.
+Kembalikan HANYA JSON array. Tanpa penjelasan, tanpa markdown code block.`;
+        userPrompt = `Berdasarkan judul video "${project.title}" dan visual style "${project.visualBible?.styleAnchorTokens || 'realistic'}", buat 3-5 karakter utama.
+
+Format output JSON array:
+[
+  {
+    "name": "nama karakter",
+    "face_features": "deskripsi wajah (usia, gender, rambut, warna kulit)",
+    "wardrobe": "deskripsi pakaian dan fashion",
+    "accessories": "deskripsi aksesori (kacamata, topi, dll)",
+    "expression_default": "ekspresi default karakter"
+  }
+]`;
+        break;
+
+      case "environments":
+        systemPrompt = `Kamu adalah environment designer untuk video animasi.
+Kembalikan HANYA JSON array. Tanpa penjelasan, tanpa markdown code block.`;
+        userPrompt = `Berdasarkan judul video "${project.title}" dan visual style "${project.visualBible?.styleAnchorTokens || 'realistic'}", buat 3-5 lokasi/environment.
+
+Format output JSON array:
+[
+  {
+    "name": "nama lokasi",
+    "description": "deskripsi detail lokasi (gedung, alam, interior, dll)",
+    "lighting": "pencahayaan (cerah, gelap, golden hour, dll)",
+    "era": "era/zaman (modern, klasik, futuristik, dll)"
+  }
+]`;
+        break;
+
+      case "cameraLanguage":
+        systemPrompt = `Kamu adalah cinematographer untuk video animasi.
+Kembalikan HANYA JSON object. Tanpa penjelasan, tanpa markdown code block.`;
+        userPrompt = `Berdasarkan judul video "${project.title}", buat camera language yang suggested.
 
 Format output JSON:
 {
-  "styleChoice": "nama gaya visual yang disarankan",
-  "styleAnchorTokens": "token1, token2, token3 (untuk image prompt)",
-  "characters": [
-    {
-      "id": "char_1",
-      "name": "nama karakter",
-      "face_features": "deskripsi wajah",
-      "wardrobe": "deskripsi pakaian",
-      "accessories": "deskripsi aksesori",
-      "expression_default": "ekspresi default"
-    }
-  ],
-  "environments": [
-    {
-      "id": "env_1",
-      "name": "nama lokasi",
-      "description": "deskripsi detail lokasi",
-      "lighting": "pencahayaan",
-      "era": "era/zaman"
-    }
-  ],
-  "colorPalette": ["#hex1", "#hex2", "#hex3"],
-  "cameraLanguage": "deskripsi camera angle dan movement"
+  "cameraLanguage": "deskripsi camera angle dan movement (close-up, wide shot, pan, dolly, dll)"
 }`;
+        updateData.cameraLanguage = body.cameraLanguage || "medium shot";
+        break;
+
+      case "colorPalette":
+        systemPrompt = `Kamu adalah color specialist untuk video animasi.
+Kembalikan HANYA JSON array. Tanpa penjelasan, tanpa markdown code block.`;
+        userPrompt = `Berdasarkan judul video "${project.title}" dan visual style "${project.visualBible?.styleAnchorTokens || 'realistic'}", buat color palette dengan 5 warna hex.
+
+Format output JSON array:
+["#hex1", "#hex2", "#hex3", "#hex4", "#hex5"]`;
+        break;
+
+      case "negativeRules":
+        systemPrompt = `Kamu adalah quality control specialist untuk video AI.
+Kembalikan HANYA JSON array. Tanpa penjelasan, tanpa markdown code block.`;
+        userPrompt = `Berdasarkan judul video "${project.title}" dan visual style "${project.visualBible?.styleAnchorTokens || 'realistic'}", buat negative rules untuk generation.
+
+Format output JSON array (5-7 items):
+["no text", "no watermark", "no blurry", dst...]`;
+        break;
+
+      default:
+        return NextResponse.json({ error: "Invalid type" }, { status: 400 });
+    }
 
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
@@ -86,44 +129,47 @@ Format output JSON:
     if (!response.ok) {
       const error = await response.text();
       console.error("OpenAI API error:", error);
-      return NextResponse.json({ error: "Failed to generate visual bible" }, { status: 500 });
+      return NextResponse.json({ error: "Failed to generate" }, { status: 500 });
     }
 
     const data = await response.json();
     let generated = data.choices[0].message.content;
-
     generated = generated.replace(/^```json\s*/, "").replace(/```\s*$/, "").trim();
 
-    let visualData;
+    let parsed;
     try {
-      visualData = JSON.parse(generated);
+      parsed = JSON.parse(generated);
     } catch {
       return NextResponse.json({ error: "Failed to parse AI response" }, { status: 500 });
     }
 
+    // Update based on type
+    switch (type) {
+      case "characters":
+        updateData.characters = JSON.stringify(parsed);
+        break;
+      case "environments":
+        updateData.environments = JSON.stringify(parsed);
+        break;
+      case "cameraLanguage":
+        updateData.cameraLanguage = parsed.cameraLanguage || "medium shot";
+        break;
+      case "colorPalette":
+        updateData.colorPalette = JSON.stringify(parsed);
+        break;
+      case "negativeRules":
+        updateData.negativeRules = JSON.stringify(parsed);
+        break;
+    }
+
     const updated = await prisma.visualBible.update({
       where: { projectId: id },
-      data: {
-        characters: JSON.stringify(visualData.characters || []),
-        environments: JSON.stringify(visualData.environments || []),
-        colorPalette: JSON.stringify(visualData.colorPalette || []),
-        cameraLanguage: visualData.cameraLanguage || "medium shot",
-        negativeRules: JSON.stringify(["no text", "no watermark", "no typography"]),
-        styleAnchorTokens: visualData.styleAnchorTokens || "",
-      },
+      data: updateData,
     });
 
-    await prisma.project.update({
-      where: { id },
-      data: { styleChoice: visualData.styleChoice || project.title },
-    });
-
-    return NextResponse.json({
-      visualBible: updated,
-      styleChoice: visualData.styleChoice,
-    });
+    return NextResponse.json({ visualBible: updated, type });
   } catch (error) {
-    console.error("Generate visual bible error:", error);
+    console.error("Generate visual error:", error);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }

@@ -7,6 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { X, Plus, Edit2, Check } from "lucide-react";
 
 interface VisualBible {
@@ -35,6 +43,21 @@ const FORMAT_OPTIONS = [
   { id: "21:9", label: "Cinematic", pixels: "2560×1080" },
 ];
 
+const STYLE_OPTIONS = [
+  { id: "realistic", label: "Realistic", icon: "📸", desc: "Photorealistic" },
+  { id: "anime", label: "Anime", icon: "🎌", desc: "Japanese animation" },
+  { id: "3d-render", label: "3D Render", icon: "🎮", desc: "Computer graphics" },
+  { id: "watercolor", label: "Watercolor", icon: "🎨", desc: "Hand-painted" },
+  { id: "oil-painting", label: "Oil Painting", icon: "🖼️", desc: "Classical art" },
+  { id: "digital-art", label: "Digital Art", icon: "✨", desc: "Modern digital" },
+  { id: "comic", label: "Comic", icon: "💥", desc: "Comic book style" },
+  { id: "sketch", label: "Sketch", icon: "✏️", desc: "Pencil sketch" },
+  { id: "pixel-art", label: "Pixel Art", icon: "👾", desc: "Retro gaming" },
+  { id: "papercraft", label: "Papercraft", icon: "📦", desc: "Paper cutout" },
+  { id: "origami", label: "Origami", icon: "🦢", desc: "Folded paper" },
+  { id: "minimalist", label: "Minimalist", icon: "◼️", desc: "Simple design" },
+];
+
 function safeJsonParse(value: string | any[] | null | undefined, fallback: any[]): any[] {
   if (!value) return fallback;
   if (Array.isArray(value)) return value;
@@ -57,13 +80,11 @@ export default function VisualPage() {
   const [generating, setGenerating] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const [editingCharacters, setEditingCharacters] = useState(false);
-  const [editingEnvironments, setEditingEnvironments] = useState(false);
-  const [editingColors, setEditingColors] = useState(false);
-  const [editingNegativeRules, setEditingNegativeRules] = useState(false);
-  const [editingStyle, setEditingStyle] = useState(false);
-  const [styleChoice, setStyleChoice] = useState("");
-  const [hasChanges, setHasChanges] = useState(false);
+  const [generatingType, setGeneratingType] = useState<string | null>(null);
+
+  // Edit modals
+  const [characterModal, setCharacterModal] = useState<{ open: boolean; index: number | null }>({ open: false, index: null });
+  const [environmentModal, setEnvironmentModal] = useState<{ open: boolean; index: number | null }>({ open: false, index: null });
 
   useEffect(() => {
     fetchProject();
@@ -128,6 +149,24 @@ export default function VisualPage() {
     }
   };
 
+  const generateSection = async (type: string) => {
+    setGeneratingType(type);
+    try {
+      const res = await fetch(`/api/projects/${params.id}/visual/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ type }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setVisualBible(data.visualBible);
+      }
+    } finally {
+      setGeneratingType(null);
+    }
+  };
+
   const updateCharacters = (chars: any[]) => {
     setVisualBible((prev) => prev ? { ...prev, characters: chars } : prev);
   };
@@ -145,14 +184,22 @@ export default function VisualPage() {
   };
 
   const addCharacter = () => {
-    const chars = [...safeJsonParse(visualBible?.characters, []), { name: "", face_features: "", description: "" }];
-    updateCharacters(chars);
+    setCharacterModal({ open: true, index: null });
   };
 
-  const updateCharacter = (idx: number, field: string, value: string) => {
+  const editCharacter = (idx: number) => {
+    setCharacterModal({ open: true, index: idx });
+  };
+
+  const saveCharacter = (char: { name: string; face_features: string; description: string }) => {
     const chars = [...safeJsonParse(visualBible?.characters, [])];
-    chars[idx] = { ...chars[idx], [field]: value };
+    if (characterModal.index === null) {
+      chars.push(char);
+    } else {
+      chars[characterModal.index] = char;
+    }
     updateCharacters(chars);
+    setCharacterModal({ open: false, index: null });
   };
 
   const removeCharacter = (idx: number) => {
@@ -161,14 +208,22 @@ export default function VisualPage() {
   };
 
   const addEnvironment = () => {
-    const envs = [...safeJsonParse(visualBible?.environments, []), { name: "", description: "" }];
-    updateEnvironments(envs);
+    setEnvironmentModal({ open: true, index: null });
   };
 
-  const updateEnvironment = (idx: number, field: string, value: string) => {
+  const editEnvironment = (idx: number) => {
+    setEnvironmentModal({ open: true, index: idx });
+  };
+
+  const saveEnvironment = (env: { name: string; description: string }) => {
     const envs = [...safeJsonParse(visualBible?.environments, [])];
-    envs[idx] = { ...envs[idx], [field]: value };
+    if (environmentModal.index === null) {
+      envs.push(env);
+    } else {
+      envs[environmentModal.index] = env;
+    }
     updateEnvironments(envs);
+    setEnvironmentModal({ open: false, index: null });
   };
 
   const removeEnvironment = (idx: number) => {
@@ -229,8 +284,6 @@ export default function VisualPage() {
   const colorPalette = safeJsonParse(visualBible.colorPalette, []);
   const negativeRules = safeJsonParse(visualBible.negativeRules, []);
 
-  const isEditing = editingCharacters || editingEnvironments || editingColors || editingNegativeRules || hasChanges;
-
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6 flex items-center justify-between">
@@ -259,8 +312,8 @@ export default function VisualPage() {
               </>
             )}
           </Button>
-          <Button onClick={handleSave} disabled={saving || !isEditing}>
-            {saving ? "Saving..." : isEditing ? "💾 Save Changes" : "✓ Saved"}
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? "Saving..." : "💾 Save"}
           </Button>
         </div>
       </div>
@@ -269,13 +322,35 @@ export default function VisualPage() {
         {/* Style */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Style</CardTitle>
+            <CardTitle className="text-base">Visual Style</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-lg font-semibold">{project.styleChoice || "Not selected"}</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {visualBible.styleAnchorTokens || "No style tokens"}
-            </p>
+            <div className="grid grid-cols-4 gap-2">
+              {STYLE_OPTIONS.map((style) => {
+                const isSelected = visualBible.styleAnchorTokens?.toLowerCase().includes(style.id);
+                return (
+                  <button
+                    key={style.id}
+                    onClick={() => {
+                      setVisualBible({
+                        ...visualBible,
+                        styleAnchorTokens: `${style.id}, detailed illustration, high quality`
+                      });
+                      setHasChanges(true);
+                    }}
+                    className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all ${
+                      isSelected
+                        ? "border-primary bg-primary/10"
+                        : "border-border hover:border-primary/50"
+                    }`}
+                  >
+                    <span className="text-3xl">{style.icon}</span>
+                    <span className="text-sm font-medium">{style.label}</span>
+                    <span className="text-xs text-muted-foreground">{style.desc}</span>
+                  </button>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
 
@@ -333,67 +408,47 @@ export default function VisualPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Characters</CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setEditingCharacters(!editingCharacters)}
-              >
-                {editingCharacters ? <Check className="h-4 w-4" /> : <Edit2 className="h-4 w-4" />}
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => generateSection("characters")} disabled={generatingType !== null}>
+                  {generatingType === "characters" ? (
+                    <span className="mr-1 h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
+                  ) : (
+                    <svg className="mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+                    </svg>
+                  )}
+                  Generate
+                </Button>
+                <Button variant="outline" size="sm" onClick={addCharacter}>
+                  <Plus className="mr-1 h-3 w-3" /> Add
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
             {characters.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No characters. Click "Generate with AI" to auto-generate or add manually.
+                No characters yet. Click "Generate" or "Add" to create.
               </p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {characters.map((char: any, idx: number) => (
-                  <div key={idx} className="rounded-lg border border-border p-3">
-                    {editingCharacters ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Input
-                            placeholder="Name"
-                            value={char.name || ""}
-                            onChange={(e) => updateCharacter(idx, "name", e.target.value)}
-                            className="font-medium"
-                          />
-                          {idx > 0 && (
-                            <Button variant="ghost" size="icon" onClick={() => removeCharacter(idx)}>
-                              <X className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                        <Input
-                          placeholder="Face features (e.g., young woman, short black hair)"
-                          value={char.face_features || ""}
-                          onChange={(e) => updateCharacter(idx, "face_features", e.target.value)}
-                        />
-                        <Input
-                          placeholder="Description (optional)"
-                          value={char.description || ""}
-                          onChange={(e) => updateCharacter(idx, "description", e.target.value)}
-                        />
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="font-medium">{char.name}</p>
-                        <p className="text-xs text-muted-foreground">{char.face_features}</p>
-                        {char.description && (
-                          <p className="mt-1 text-xs text-muted-foreground">{char.description}</p>
-                        )}
-                      </div>
-                    )}
+                  <div key={idx} className="flex items-center justify-between p-3 rounded-lg border border-border">
+                    <div className="flex-1">
+                      <p className="font-medium">{char.name || `Character ${idx + 1}`}</p>
+                      <p className="text-xs text-muted-foreground">{char.face_features}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => editCharacter(idx)}>
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => removeCharacter(idx)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
-            )}
-            {editingCharacters && (
-              <Button variant="outline" size="sm" className="mt-3" onClick={addCharacter}>
-                <Plus className="mr-1 h-4 w-4" /> Add Character
-              </Button>
             )}
           </CardContent>
         </Card>
@@ -403,59 +458,47 @@ export default function VisualPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Environments</CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setEditingEnvironments(!editingEnvironments)}
-              >
-                {editingEnvironments ? <Check className="h-4 w-4" /> : <Edit2 className="h-4 w-4" />}
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => generateSection("environments")} disabled={generatingType !== null}>
+                  {generatingType === "environments" ? (
+                    <span className="mr-1 h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
+                  ) : (
+                    <svg className="mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+                    </svg>
+                  )}
+                  Generate
+                </Button>
+                <Button variant="outline" size="sm" onClick={addEnvironment}>
+                  <Plus className="mr-1 h-3 w-3" /> Add
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
             {environments.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No environments. Click "Generate with AI" to auto-generate or add manually.
+                No environments yet. Click "Generate" or "Add" to create.
               </p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {environments.map((env: any, idx: number) => (
-                  <div key={idx} className="rounded-lg border border-border p-3">
-                    {editingEnvironments ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Input
-                            placeholder="Environment name"
-                            value={env.name || ""}
-                            onChange={(e) => updateEnvironment(idx, "name", e.target.value)}
-                            className="font-medium"
-                          />
-                          {idx > 0 && (
-                            <Button variant="ghost" size="icon" onClick={() => removeEnvironment(idx)}>
-                              <X className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                        <Input
-                          placeholder="Description (e.g., misty forest with ancient ruins)"
-                          value={env.description || ""}
-                          onChange={(e) => updateEnvironment(idx, "description", e.target.value)}
-                        />
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="font-medium">{env.name}</p>
-                        <p className="text-xs text-muted-foreground">{env.description}</p>
-                      </div>
-                    )}
+                  <div key={idx} className="flex items-center justify-between p-3 rounded-lg border border-border">
+                    <div className="flex-1">
+                      <p className="font-medium">{env.name || `Environment ${idx + 1}`}</p>
+                      <p className="text-xs text-muted-foreground">{env.description}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => editEnvironment(idx)}>
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => removeEnvironment(idx)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
-            )}
-            {editingEnvironments && (
-              <Button variant="outline" size="sm" className="mt-3" onClick={addEnvironment}>
-                <Plus className="mr-1 h-4 w-4" /> Add Environment
-              </Button>
             )}
           </CardContent>
         </Card>
@@ -463,7 +506,19 @@ export default function VisualPage() {
         {/* Camera Language */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Camera Language</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Camera Language</CardTitle>
+              <Button variant="outline" size="sm" onClick={() => generateSection("cameraLanguage")} disabled={generatingType !== null}>
+                {generatingType === "cameraLanguage" ? (
+                  <span className="mr-1 h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
+                ) : (
+                  <svg className="mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+                  </svg>
+                )}
+                Generate
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <Input
@@ -481,51 +536,44 @@ export default function VisualPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Color Palette</CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setEditingColors(!editingColors)}
-              >
-                {editingColors ? <Check className="h-4 w-4" /> : <Edit2 className="h-4 w-4" />}
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => generateSection("colorPalette")} disabled={generatingType !== null}>
+                  {generatingType === "colorPalette" ? (
+                    <span className="mr-1 h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
+                  ) : (
+                    <svg className="mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+                    </svg>
+                  )}
+                  Generate
+                </Button>
+                <Button variant="outline" size="sm" onClick={addColor}>
+                  <Plus className="mr-1 h-3 w-3" /> Add
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
             {colorPalette.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No colors generated yet. Click "Generate with AI" or add manually.
+                No colors yet. Click "Generate" or "Add" to create.
               </p>
             ) : (
               <div className="flex flex-wrap gap-3">
                 {colorPalette.map((color: string, idx: number) => (
                   <div key={idx} className="relative group">
-                    {editingColors ? (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="color"
-                          value={color}
-                          onChange={(e) => updateColor(idx, e.target.value)}
-                          className="h-10 w-10 rounded-lg border border-border cursor-pointer"
-                        />
-                        <Button variant="ghost" size="icon" onClick={() => removeColor(idx)}>
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div
-                        className="h-12 w-12 rounded-lg border-2 border-border cursor-pointer transition-transform hover:scale-110"
-                        style={{ backgroundColor: color }}
-                        title={color}
-                      />
-                    )}
+                    <input
+                      type="color"
+                      value={color}
+                      onChange={(e) => updateColor(idx, e.target.value)}
+                      className="h-12 w-12 rounded-lg border border-border cursor-pointer"
+                    />
+                    <Button variant="ghost" size="icon" className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-background" onClick={() => removeColor(idx)}>
+                      <X className="h-3 w-3" />
+                    </Button>
                   </div>
                 ))}
               </div>
-            )}
-            {editingColors && (
-              <Button variant="outline" size="sm" className="mt-3" onClick={addColor}>
-                <Plus className="mr-1 h-4 w-4" /> Add Color
-              </Button>
             )}
           </CardContent>
         </Card>
@@ -535,44 +583,134 @@ export default function VisualPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Negative Rules</CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setEditingNegativeRules(!editingNegativeRules)}
-              >
-                {editingNegativeRules ? <Check className="h-4 w-4" /> : <Edit2 className="h-4 w-4" />}
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => generateSection("negativeRules")} disabled={generatingType !== null}>
+                  {generatingType === "negativeRules" ? (
+                    <span className="mr-1 h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
+                  ) : (
+                    <svg className="mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+                    </svg>
+                  )}
+                  Generate
+                </Button>
+                <Button variant="outline" size="sm" onClick={addNegativeRule}>
+                  <Plus className="mr-1 h-3 w-3" /> Add
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {negativeRules.map((rule: string, idx: number) => (
-                <div key={idx} className="flex items-center gap-1">
-                  {editingNegativeRules ? (
-                    <div className="flex items-center gap-1 rounded-full border border-border bg-background px-2 py-1">
-                      <Input
-                        value={rule}
-                        onChange={(e) => updateNegativeRule(idx, e.target.value)}
-                        className="h-5 w-24 border-0 p-0 text-xs"
-                      />
-                      <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => removeNegativeRule(idx)}>
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <span className="rounded-full bg-muted px-3 py-1 text-sm">{rule}</span>
-                  )}
-                </div>
-              ))}
-            </div>
-            {editingNegativeRules && (
-              <Button variant="outline" size="sm" className="mt-3" onClick={addNegativeRule}>
-                <Plus className="mr-1 h-4 w-4" /> Add Rule
-              </Button>
+            {negativeRules.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No negative rules yet. Click "Generate" or "Add" to create.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {negativeRules.map((rule: string, idx: number) => (
+                  <div key={idx} className="flex items-center gap-1 rounded-full border border-border bg-background px-3 py-1">
+                    <span className="text-sm">{rule}</span>
+                    <Button variant="ghost" size="icon" className="h-4 w-4 ml-1" onClick={() => removeNegativeRule(idx)}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
       </div>
+
+      {/* Character Edit Modal */}
+      <Dialog open={characterModal.open} onOpenChange={(open) => !open && setCharacterModal({ open: false, index: null })}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{characterModal.index === null ? "Add Character" : "Edit Character"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input
+                id="charName"
+                placeholder="Character name"
+                defaultValue={characterModal.index !== null ? characters[characterModal.index]?.name : ""}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Face Features</Label>
+              <Input
+                id="charFace"
+                placeholder="e.g., young woman, short black hair"
+                defaultValue={characterModal.index !== null ? characters[characterModal.index]?.face_features : ""}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Description (optional)</Label>
+              <Input
+                id="charDesc"
+                placeholder="Additional details"
+                defaultValue={characterModal.index !== null ? characters[characterModal.index]?.description : ""}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCharacterModal({ open: false, index: null })}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const name = (document.getElementById("charName") as HTMLInputElement)?.value;
+                const face_features = (document.getElementById("charFace") as HTMLInputElement)?.value;
+                const description = (document.getElementById("charDesc") as HTMLInputElement)?.value;
+                saveCharacter({ name, face_features, description });
+              }}
+            >
+              {characterModal.index === null ? "Add" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Environment Edit Modal */}
+      <Dialog open={environmentModal.open} onOpenChange={(open) => !open && setEnvironmentModal({ open: false, index: null })}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{environmentModal.index === null ? "Add Environment" : "Edit Environment"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input
+                id="envName"
+                placeholder="Environment name"
+                defaultValue={environmentModal.index !== null ? environments[environmentModal.index]?.name : ""}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Input
+                id="envDesc"
+                placeholder="e.g., misty forest with ancient ruins"
+                defaultValue={environmentModal.index !== null ? environments[environmentModal.index]?.description : ""}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEnvironmentModal({ open: false, index: null })}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const name = (document.getElementById("envName") as HTMLInputElement)?.value;
+                const description = (document.getElementById("envDesc") as HTMLInputElement)?.value;
+                saveEnvironment({ name, description });
+              }}
+            >
+              {environmentModal.index === null ? "Add" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

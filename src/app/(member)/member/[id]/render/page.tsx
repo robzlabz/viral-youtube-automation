@@ -44,6 +44,29 @@ export default function RenderPage() {
   const [rendering, setRendering] = useState(false);
   const [progress, setProgress] = useState(0);
 
+  // Render options
+  const [transition, setTransition] = useState<"cut" | "fade" | "dissolve" | "wipe" | "slide">("dissolve");
+  const [transitionDuration, setTransitionDuration] = useState(0.5);
+  const [effect, setEffect] = useState<"none" | "kenburns" | "panzoom" | "slowzoom" | "parallax">("kenburns");
+  const [musicVolume, setMusicVolume] = useState(0);
+  const [showMusic, setShowMusic] = useState(false);
+
+  const TRANSITIONS = [
+    { id: "cut", label: "Cut", icon: "✂️", desc: "Instant switch" },
+    { id: "fade", label: "Fade", icon: "🌫️", desc: "Smooth fade" },
+    { id: "dissolve", label: "Dissolve", icon: "💫", desc: "Cross dissolve" },
+    { id: "wipe", label: "Wipe", icon: "➡️", desc: "Directional wipe" },
+    { id: "slide", label: "Slide", icon: "↔️", desc: "Slide transition" },
+  ] as const;
+
+  const EFFECTS = [
+    { id: "none", label: "None", icon: "⬜", desc: "Static image" },
+    { id: "kenburns", label: "Ken Burns", icon: "🔍", desc: "Slow zoom & pan" },
+    { id: "panzoom", label: "Pan & Zoom", icon: "🎯", desc: "Dynamic movement" },
+    { id: "slowzoom", label: "Slow Zoom", icon: "🔎", desc: "Gentle zoom in/out" },
+    { id: "parallax", label: "Parallax", icon: "🌌", desc: "Depth effect" },
+  ] as const;
+
   useEffect(() => {
     fetchProject();
   }, []);
@@ -95,6 +118,10 @@ export default function RenderPage() {
   const totalVoiceLength = project.scenes.reduce((acc, s) => acc + (s.voiceLength || 0), 0);
   const canRender = voicesReady === project.scenes.length && imagesReady === project.scenes.length && project.scenes.length > 0;
 
+  // Summary data
+  const scenesWithVoices = project.scenes.filter((s) => s.voiceFilePath);
+  const scenesWithImages = project.scenes.filter((s) => s.imageFilePath);
+
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-6">
@@ -106,6 +133,84 @@ export default function RenderPage() {
         </Link>
         <h1 className="mt-1 text-2xl font-bold text-foreground">Render Video</h1>
       </div>
+
+      {/* Project Summary */}
+      <Card className="mb-6 border-dashed">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <svg className="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6" />
+            </svg>
+            Project Summary
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Total Scenes */}
+            <div className="flex flex-col items-center p-3 rounded-lg bg-muted/50">
+              <span className="text-3xl font-bold text-primary">{project.scenes.length}</span>
+              <span className="text-xs text-muted-foreground mt-1">Total Scenes</span>
+            </div>
+
+            {/* Total Duration */}
+            <div className="flex flex-col items-center p-3 rounded-lg bg-muted/50">
+              <span className="text-2xl font-bold text-foreground">{formatDuration(totalVoiceLength)}</span>
+              <span className="text-xs text-muted-foreground mt-1">Total Duration</span>
+            </div>
+
+            {/* Voices Ready */}
+            <div className="flex flex-col items-center p-3 rounded-lg bg-muted/50">
+              <span className="text-3xl font-bold text-green-600">{voicesReady}</span>
+              <span className="text-xs text-muted-foreground mt-1">Voices Ready</span>
+            </div>
+
+            {/* Images Ready */}
+            <div className="flex flex-col items-center p-3 rounded-lg bg-muted/50">
+              <span className="text-3xl font-bold text-orange-600">{imagesReady}</span>
+              <span className="text-xs text-muted-foreground mt-1">Images Ready</span>
+            </div>
+          </div>
+
+          {/* Scenes Breakdown */}
+          {project.scenes.length > 0 && (
+            <div className="mt-4 pt-4 border-t">
+              <p className="text-sm font-medium mb-3">Scenes Breakdown</p>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {project.scenes.map((scene, idx) => {
+                  const hasVoice = !!scene.voiceFilePath;
+                  const hasImage = !!scene.imageFilePath;
+                  const voiceDur = scene.voiceLength ? formatDuration(scene.voiceLength) : "—";
+
+                  return (
+                    <div key={scene.id} className="flex items-center gap-3 text-sm p-2 rounded bg-muted/30">
+                      <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-medium">
+                        {idx + 1}
+                      </span>
+                      <span className="flex-1 truncate text-muted-foreground">
+                        {scene.text.substring(0, 50)}{scene.text.length > 50 ? "..." : ""}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`flex items-center gap-1 text-xs ${hasVoice ? "text-green-600" : "text-muted-foreground"}`}>
+                          {hasVoice ? "🔊" : "⏳"} {voiceDur}
+                        </span>
+                        <span className={`flex items-center gap-1 text-xs ${hasImage ? "text-green-600" : "text-muted-foreground"}`}>
+                          {hasImage ? "🖼️" : "⏳"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Estimated Output */}
+          <div className="mt-4 pt-4 border-t flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Estimated Output</span>
+            <span className="text-sm font-medium">1920×1080 · H.264 · AAC · 30fps</span>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Pre-render Checklist */}
       <Card className="mb-6">
@@ -141,6 +246,115 @@ export default function RenderPage() {
               <span className="text-muted-foreground">⏳</span>
             )}
             <span className="text-sm">{project.scenes.length} scenes defined</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Effects & Transitions */}
+      <Card className="mb-6">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Effects & Transitions</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {/* Transitions */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium">Transition</label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Duration</span>
+                <select
+                  value={transitionDuration}
+                  onChange={(e) => setTransitionDuration(Number(e.target.value))}
+                  className="h-7 w-16 rounded border border-input bg-background px-2 text-xs"
+                >
+                  <option value={0.25}>0.25s</option>
+                  <option value={0.5}>0.5s</option>
+                  <option value={0.75}>0.75s</option>
+                  <option value={1}>1s</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-5 gap-2">
+              {TRANSITIONS.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setTransition(t.id)}
+                  className={`flex flex-col items-center gap-1 p-3 rounded-lg border-2 transition-all ${
+                    transition === t.id
+                      ? "border-primary bg-primary/10"
+                      : "border-border hover:border-primary/50"
+                  }`}
+                >
+                  <span className="text-xl">{t.icon}</span>
+                  <span className="text-xs font-medium">{t.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Effects */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">Image Effect</label>
+            <div className="grid grid-cols-5 gap-2">
+              {EFFECTS.map((e) => (
+                <button
+                  key={e.id}
+                  onClick={() => setEffect(e.id)}
+                  className={`flex flex-col items-center gap-1 p-3 rounded-lg border-2 transition-all ${
+                    effect === e.id
+                      ? "border-primary bg-primary/10"
+                      : "border-border hover:border-primary/50"
+                  }`}
+                >
+                  <span className="text-xl">{e.icon}</span>
+                  <span className="text-xs font-medium">{e.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Background Music */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium">Background Music</label>
+              <button
+                onClick={() => setShowMusic(!showMusic)}
+                className={`text-xs px-2 py-1 rounded ${
+                  showMusic ? "bg-primary text-primary-foreground" : "bg-muted"
+                }`}
+              >
+                {showMusic ? "Enabled" : "Disabled"}
+              </button>
+            </div>
+            {showMusic && (
+              <div className="space-y-3 p-3 rounded-lg bg-muted/50">
+                <p className="text-xs text-muted-foreground">
+                  Select ambient music track for your video
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {["Ambient", "Cinematic", "Emotional", "Upbeat", "Nature", "None"].map((track) => (
+                    <button
+                      key={track}
+                      className="text-xs py-2 px-3 rounded border border-border hover:border-primary/50 transition-colors"
+                    >
+                      {track}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2">
+                  <label className="text-xs text-muted-foreground mb-1 block">Volume: {Math.round(musicVolume * 100)}%</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={musicVolume}
+                    onChange={(e) => setMusicVolume(Number(e.target.value))}
+                    className="w-full h-2 rounded-lg appearance-none bg-muted cursor-pointer"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

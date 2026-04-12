@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, Suspense, useCallback } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
@@ -38,18 +38,31 @@ function getSceneStatusIcon(scene: Scene) {
   );
 }
 
-export default function ScenesPage() {
+function ScenesContent() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [project, setProject] = useState<{ id: string; title: string; scenes: Scene[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingScene, setEditingScene] = useState<Scene | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedCount, setGeneratedCount] = useState(0);
+  const [showBanner, setShowBanner] = useState(false);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const hasStartedPollingRef = useRef(false);
 
-  useEffect(() => {
-    fetchProject();
+  const isConverting = searchParams.get("converting") === "true";
+
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    setIsGenerating(false);
+    setShowBanner(false);
   }, []);
 
-  const fetchProject = async () => {
+  const fetchProject = useCallback(async () => {
     try {
       const res = await fetch(`/api/projects/${params.id}`, {
         credentials: "include",
@@ -57,13 +70,70 @@ export default function ScenesPage() {
       if (res.ok) {
         const data = await res.json();
         setProject(data);
+        setGeneratedCount(data.scenes?.length || 0);
       } else if (res.status === 401) {
         router.push("/login");
       }
     } finally {
       setLoading(false);
     }
-  };
+  }, [params.id, router]);
+
+  const startPolling = useCallback(() => {
+    if (hasStartedPollingRef.current) return;
+    hasStartedPollingRef.current = true;
+    setIsGenerating(true);
+    setGeneratedCount(0);
+
+    pollingRef.current = setInterval(async () => {
+      try {
+        // Poll the convert-script status endpoint
+        const res = await fetch(`/api/projects/${params.id}/convert-script?action=status`, {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+
+          setGeneratedCount(data.scenes?.length || 0);
+
+          // Update project data
+          setProject((prev) => prev ? { ...prev, scenes: data.scenes, status: data.status } : prev);
+
+          // Stop polling when conversion is done or error
+          if (data.status === "done" || data.status === "error") {
+            stopPolling();
+          }
+        }
+      } catch (err) {
+        console.error("Polling error:", err);
+      }
+    }, 1500);
+  }, [params.id, stopPolling]);
+
+  useEffect(() => {
+    fetchProject();
+  }, [fetchProject]);
+
+  // Start polling when converting param is present
+  useEffect(() => {
+    if (isConverting) {
+      setShowBanner(true);
+      if (!hasStartedPollingRef.current) {
+        const timer = setTimeout(() => {
+          startPolling();
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isConverting, startPolling]);
+
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
+  }, []);
 
   const handleAddScene = async () => {
     await fetch(`/api/projects/${params.id}/scenes`, {
@@ -115,6 +185,8 @@ export default function ScenesPage() {
     );
   }
 
+  const scenes = project.scenes || [];
+
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6 flex items-center justify-between">
@@ -126,7 +198,7 @@ export default function ScenesPage() {
             ← Back to Project
           </Link>
           <h1 className="mt-1 text-2xl font-bold text-foreground">
-            Scenes ({project.scenes.length})
+            Scenes ({scenes.length})
           </h1>
         </div>
         <div className="flex gap-2">
@@ -136,7 +208,28 @@ export default function ScenesPage() {
         </div>
       </div>
 
-      {project.scenes.length === 0 ? (
+      {/* Generation Progress Banner */}
+      {showBanner && (
+        <div className="mb-6 rounded-lg border border-primary/50 bg-primary/5 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="h-3 w-3 animate-pulse rounded-full bg-primary" />
+              <span className="text-sm font-medium text-primary">AI is generating scenes...</span>
+            </div>
+            <span className="text-sm text-muted-foreground">
+              {generatedCount} scene{generatedCount !== 1 ? "s" : ""} created
+            </span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-primary animate-pulse" style={{ width: "100%" }} />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Scenes will appear below as they are generated. This may take a moment.
+          </p>
+        </div>
+      )}
+
+      {scenes.length === 0 && !isGenerating ? (
         <div className="rounded-lg border border-border bg-card py-12 text-center">
           <p className="text-muted-foreground">No scenes yet. Add one to get started.</p>
           <Button className="mt-4" onClick={handleAddScene}>
@@ -145,10 +238,10 @@ export default function ScenesPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {project.scenes.map((scene) => (
+          {scenes.map((scene) => (
             <div
               key={scene.id}
-              className="rounded-lg border border-border bg-card p-4"
+              className="rounded-lg border border-border bg-card p-4 transition-all hover:shadow-md"
             >
               <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -194,6 +287,16 @@ export default function ScenesPage() {
               )}
             </div>
           ))}
+
+          {/* Loading placeholder for scenes being generated */}
+          {isGenerating && (
+            <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4 animate-pulse">
+              <div className="flex items-center gap-2 text-sm text-primary">
+                <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                <span>Waiting for next scene...</span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -240,5 +343,17 @@ export default function ScenesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ScenesPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    }>
+      <ScenesContent />
+    </Suspense>
   );
 }
