@@ -23,7 +23,7 @@ export async function GET(
     const project = await prisma.project.findFirst({
       where: { id, userId: payload.userId },
       include: {
-        visualBible: true,
+        visualImage: true,
         scenes: { orderBy: { sceneIndex: "asc" } },
         jobs: { orderBy: { createdAt: "desc" } },
         renderOutput: true,

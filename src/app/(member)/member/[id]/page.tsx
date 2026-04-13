@@ -14,7 +14,7 @@ interface Project {
   narrativeStyle: string;
   script: string | null;
   scenes: Scene[];
-  visualBible: VisualBible | null;
+  visualImage: VisualImage | null;
   renderOutput: { filepath: string; durationSec: number } | null;
 }
 
@@ -29,7 +29,7 @@ interface Scene {
   status: string;
 }
 
-interface VisualBible {
+interface VisualImage {
   id: string;
   characters: string;
   environments: string;
@@ -247,7 +247,7 @@ export default function ProjectDetailPage() {
               <div className="mb-2 text-2xl">🎨</div>
               <p className="text-sm font-semibold">Visual</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {project.visualBible ? "✓ Set" : "Style"}
+                {project.visualImage ? "✓ Set" : "Style"}
               </p>
             </CardContent>
           </Card>

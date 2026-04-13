@@ -35,7 +35,7 @@ export async function POST(
 
     const project = await prisma.project.findFirst({
       where: { id, userId: payload.userId },
-      include: { visualBible: true },
+      include: { visualImage: true },
     });
 
     if (!project) {
@@ -56,8 +56,8 @@ export async function POST(
 
     const runwareApiKey = process.env.RUNWARE_API_KEY;
     const runwareUrl = process.env.RUNWARE_URL || "https://api.runware.ai/v1";
-    const negativeRules = safeParseJson(project.visualBible?.negativeRules, []);
-    const styleTokens = (project.visualBible?.styleAnchorTokens as string) || "";
+    const negativeRules = safeParseJson(project.visualImage?.negativeRules, []);
+    const styleTokens = (project.visualImage?.styleAnchorTokens as string) || "";
     const negativePrompt = negativeRules.length > 0 ? negativeRules.join(", ") : "text, watermark, typography";
 
     const imagePrompt = `${scene.imagePrompt}, ${styleTokens}, ${negativePrompt}`;

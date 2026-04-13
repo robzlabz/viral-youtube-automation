@@ -23,7 +23,7 @@ export async function POST(
 
     const project = await prisma.project.findFirst({
       where: { id, userId: payload.userId },
-      include: { visualBible: true },
+      include: { visualImage: true },
     });
 
     if (!project) {
@@ -45,7 +45,7 @@ export async function POST(
       case "characters":
         systemPrompt = `Kamu adalah character designer untuk video animasi.
 Kembalikan HANYA JSON array. Tanpa penjelasan, tanpa markdown code block.`;
-        userPrompt = `Berdasarkan judul video "${project.title}" dan visual style "${project.visualBible?.styleAnchorTokens || 'realistic'}", buat 3-5 karakter utama.
+        userPrompt = `Berdasarkan judul video "${project.title}" dan visual style "${project.visualImage?.styleAnchorTokens || 'realistic'}", buat 3-5 karakter utama.
 
 Format output JSON array:
 [
@@ -62,7 +62,7 @@ Format output JSON array:
       case "environments":
         systemPrompt = `Kamu adalah environment designer untuk video animasi.
 Kembalikan HANYA JSON array. Tanpa penjelasan, tanpa markdown code block.`;
-        userPrompt = `Berdasarkan judul video "${project.title}" dan visual style "${project.visualBible?.styleAnchorTokens || 'realistic'}", buat 3-5 lokasi/environment.
+        userPrompt = `Berdasarkan judul video "${project.title}" dan visual style "${project.visualImage?.styleAnchorTokens || 'realistic'}", buat 3-5 lokasi/environment.
 
 Format output JSON array:
 [
@@ -90,7 +90,7 @@ Format output JSON:
       case "colorPalette":
         systemPrompt = `Kamu adalah color specialist untuk video animasi.
 Kembalikan HANYA JSON array. Tanpa penjelasan, tanpa markdown code block.`;
-        userPrompt = `Berdasarkan judul video "${project.title}" dan visual style "${project.visualBible?.styleAnchorTokens || 'realistic'}", buat color palette dengan 5 warna hex.
+        userPrompt = `Berdasarkan judul video "${project.title}" dan visual style "${project.visualImage?.styleAnchorTokens || 'realistic'}", buat color palette dengan 5 warna hex.
 
 Format output JSON array:
 ["#hex1", "#hex2", "#hex3", "#hex4", "#hex5"]`;
@@ -99,7 +99,7 @@ Format output JSON array:
       case "negativeRules":
         systemPrompt = `Kamu adalah quality control specialist untuk video AI.
 Kembalikan HANYA JSON array. Tanpa penjelasan, tanpa markdown code block.`;
-        userPrompt = `Berdasarkan judul video "${project.title}" dan visual style "${project.visualBible?.styleAnchorTokens || 'realistic'}", buat negative rules untuk generation.
+        userPrompt = `Berdasarkan judul video "${project.title}" dan visual style "${project.visualImage?.styleAnchorTokens || 'realistic'}", buat negative rules untuk generation.
 
 Format output JSON array (5-7 items):
 ["no text", "no watermark", "no blurry", dst...]`;
@@ -162,14 +162,18 @@ Format output JSON array (5-7 items):
         break;
     }
 
-    const updated = await prisma.visualBible.update({
+    const updated = await prisma.visualImage.upsert({
       where: { projectId: id },
-      data: updateData,
+      create: {
+        projectId: id,
+        ...updateData,
+      },
+      update: updateData,
     });
 
-    return NextResponse.json({ visualBible: updated, type });
+    return NextResponse.json({ visualImage: updated, type });
   } catch (error) {
-    console.error("Generate visual error:", error);
+    console.error("Generate visual image error:", error);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }

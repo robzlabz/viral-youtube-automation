@@ -31,7 +31,7 @@ model Project {
   userId       String
   user         User         @relation(fields: [userId], references: [id])
 
-  visualBible  VisualBible?
+  visualImage  VisualImage?
   scenes       Scene[]
   jobs         Job[]
   renderOutput RenderOutput?
@@ -47,7 +47,7 @@ enum ProjectStatus {
   COMPLETE
 }
 
-model VisualBible {
+model VisualImage {
   id                   String @id @default(cuid())
   characters           Json   @default("[]")
   environments         Json   @default("[]")

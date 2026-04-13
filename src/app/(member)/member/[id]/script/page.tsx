@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
-interface VisualBible {
+interface VisualImage {
   id: string;
   characters: string;
   environments: string;
@@ -30,7 +30,7 @@ interface Project {
   script: string | null;
   narrativeStyle: string;
   status: string;
-  visualBible: VisualBible | null;
+  visualImage: VisualImage | null;
 }
 
 const NARRATIVE_STYLES = [
@@ -210,9 +210,9 @@ export default function ScriptEditorPage() {
       credentials: "include",
       body: JSON.stringify({
         script,
-        styleAnchorTokens: project?.visualBible?.styleAnchorTokens || "",
-        characters: project?.visualBible?.characters || "[]",
-        environments: project?.visualBible?.environments || "[]",
+        styleAnchorTokens: project?.visualImage?.styleAnchorTokens || "",
+        characters: project?.visualImage?.characters || "[]",
+        environments: project?.visualImage?.environments || "[]",
       }),
     });
 

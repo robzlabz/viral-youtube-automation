@@ -28,21 +28,32 @@ export async function PATCH(
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const visualBible = await prisma.visualBible.update({
+    const visualImage = await prisma.visualImage.upsert({
       where: { projectId: id },
-      data: {
+      create: {
+        projectId: id,
         characters: typeof body.characters === "string" ? body.characters : JSON.stringify(body.characters || []),
         environments: typeof body.environments === "string" ? body.environments : JSON.stringify(body.environments || []),
         colorPalette: typeof body.colorPalette === "string" ? body.colorPalette : JSON.stringify(body.colorPalette || []),
         cameraLanguage: body.cameraLanguage || "medium shot",
         negativeRules: typeof body.negativeRules === "string" ? body.negativeRules : JSON.stringify(body.negativeRules || ["no text", "no watermark", "no typography"]),
         styleAnchorTokens: body.styleAnchorTokens || "",
+        aspectRatio: body.aspectRatio || "16:9",
+      },
+      update: {
+        characters: typeof body.characters === "string" ? body.characters : JSON.stringify(body.characters || []),
+        environments: typeof body.environments === "string" ? body.environments : JSON.stringify(body.environments || []),
+        colorPalette: typeof body.colorPalette === "string" ? body.colorPalette : JSON.stringify(body.colorPalette || []),
+        cameraLanguage: body.cameraLanguage || "medium shot",
+        negativeRules: typeof body.negativeRules === "string" ? body.negativeRules : JSON.stringify(body.negativeRules || ["no text", "no watermark", "no typography"]),
+        styleAnchorTokens: body.styleAnchorTokens || "",
+        aspectRatio: body.aspectRatio || "16:9",
       },
     });
 
-    return NextResponse.json(visualBible);
+    return NextResponse.json(visualImage);
   } catch (error) {
-    console.error("Update visual bible error:", error);
+    console.error("Update visual image error:", error);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }

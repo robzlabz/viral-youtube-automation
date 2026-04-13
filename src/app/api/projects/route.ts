@@ -55,12 +55,12 @@ export async function POST(request: Request) {
         title: title.trim(),
         slug,
         userId: payload.userId,
-        visualBible: {
+        visualImage: {
           create: {},
         },
       },
       include: {
-        visualBible: true,
+        visualImage: true,
       },
     });
 

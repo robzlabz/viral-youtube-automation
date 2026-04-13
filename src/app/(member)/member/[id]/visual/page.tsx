@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { X, Plus, Edit2, Check } from "lucide-react";
 
-interface VisualBible {
+interface VisualImage {
   id: string;
   characters: string | any[];
   environments: string | any[];
@@ -32,7 +32,7 @@ interface Project {
   id: string;
   title: string;
   styleChoice: string | null;
-  visualBible: VisualBible | null;
+  visualImage: VisualImage | null;
 }
 
 const FORMAT_OPTIONS = [
@@ -75,7 +75,7 @@ export default function VisualPage() {
   const params = useParams();
   const router = useRouter();
   const [project, setProject] = useState<Project | null>(null);
-  const [visualBible, setVisualBible] = useState<VisualBible | null>(null);
+  const [visualImage, setVisualImage] = useState<VisualImage | null>(null);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -98,7 +98,7 @@ export default function VisualPage() {
       if (res.ok) {
         const data = await res.json();
         setProject(data);
-        setVisualBible(data.visualBible);
+        setVisualImage(data.visualImage);
       } else if (res.status === 401) {
         router.push("/login");
       }
@@ -108,24 +108,31 @@ export default function VisualPage() {
   };
 
   const handleSave = async () => {
-    if (!visualBible) return;
+    if (!visualImage) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/projects/${params.id}/visual`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(visualBible),
+        body: JSON.stringify(visualImage),
       });
-      if (res.ok) {
-        setEditingCharacters(false);
-        setEditingEnvironments(false);
-        setEditingColors(false);
-        setEditingNegativeRules(false);
-        setHasChanges(false);
-      }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const autoSaveVisual = async (updated: VisualImage) => {
+    setVisualImage(updated);
+    try {
+      await fetch(`/api/projects/${params.id}/visual`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(updated),
+      });
+    } catch (err) {
+      console.error("Auto-save failed:", err);
     }
   };
 
@@ -139,7 +146,7 @@ export default function VisualPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setVisualBible(data.visualBible);
+        setVisualImage(data.visualImage);
         setProject((prev) =>
           prev ? { ...prev, styleChoice: data.styleChoice } : prev
         );
@@ -160,7 +167,7 @@ export default function VisualPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setVisualBible(data.visualBible);
+        setVisualImage(data.visualImage);
       }
     } finally {
       setGeneratingType(null);
@@ -168,19 +175,19 @@ export default function VisualPage() {
   };
 
   const updateCharacters = (chars: any[]) => {
-    setVisualBible((prev) => prev ? { ...prev, characters: chars } : prev);
+    setVisualImage((prev) => prev ? { ...prev, characters: chars } : prev);
   };
 
   const updateEnvironments = (envs: any[]) => {
-    setVisualBible((prev) => prev ? { ...prev, environments: envs } : prev);
+    setVisualImage((prev) => prev ? { ...prev, environments: envs } : prev);
   };
 
   const updateColorPalette = (colors: string[]) => {
-    setVisualBible((prev) => prev ? { ...prev, colorPalette: colors } : prev);
+    setVisualImage((prev) => prev ? { ...prev, colorPalette: colors } : prev);
   };
 
   const updateNegativeRules = (rules: string[]) => {
-    setVisualBible((prev) => prev ? { ...prev, negativeRules: rules } : prev);
+    setVisualImage((prev) => prev ? { ...prev, negativeRules: rules } : prev);
   };
 
   const addCharacter = () => {
@@ -192,7 +199,7 @@ export default function VisualPage() {
   };
 
   const saveCharacter = (char: { name: string; face_features: string; description: string }) => {
-    const chars = [...safeJsonParse(visualBible?.characters, [])];
+    const chars = [...safeJsonParse(visualImage?.characters, [])];
     if (characterModal.index === null) {
       chars.push(char);
     } else {
@@ -203,7 +210,7 @@ export default function VisualPage() {
   };
 
   const removeCharacter = (idx: number) => {
-    const chars = safeJsonParse(visualBible?.characters, []).filter((_: any, i: number) => i !== idx);
+    const chars = safeJsonParse(visualImage?.characters, []).filter((_: any, i: number) => i !== idx);
     updateCharacters(chars);
   };
 
@@ -216,7 +223,7 @@ export default function VisualPage() {
   };
 
   const saveEnvironment = (env: { name: string; description: string }) => {
-    const envs = [...safeJsonParse(visualBible?.environments, [])];
+    const envs = [...safeJsonParse(visualImage?.environments, [])];
     if (environmentModal.index === null) {
       envs.push(env);
     } else {
@@ -227,39 +234,39 @@ export default function VisualPage() {
   };
 
   const removeEnvironment = (idx: number) => {
-    const envs = safeJsonParse(visualBible?.environments, []).filter((_: any, i: number) => i !== idx);
+    const envs = safeJsonParse(visualImage?.environments, []).filter((_: any, i: number) => i !== idx);
     updateEnvironments(envs);
   };
 
   const addColor = () => {
-    const colors = [...safeJsonParse(visualBible?.colorPalette, []), "#000000"];
+    const colors = [...safeJsonParse(visualImage?.colorPalette, []), "#000000"];
     updateColorPalette(colors);
   };
 
   const updateColor = (idx: number, value: string) => {
-    const colors = [...safeJsonParse(visualBible?.colorPalette, [])];
+    const colors = [...safeJsonParse(visualImage?.colorPalette, [])];
     colors[idx] = value;
     updateColorPalette(colors);
   };
 
   const removeColor = (idx: number) => {
-    const colors = safeJsonParse(visualBible?.colorPalette, []).filter((_: any, i: number) => i !== idx);
+    const colors = safeJsonParse(visualImage?.colorPalette, []).filter((_: any, i: number) => i !== idx);
     updateColorPalette(colors);
   };
 
   const addNegativeRule = () => {
-    const rules = [...safeJsonParse(visualBible?.negativeRules, []), ""];
+    const rules = [...safeJsonParse(visualImage?.negativeRules, []), ""];
     updateNegativeRules(rules);
   };
 
   const updateNegativeRule = (idx: number, value: string) => {
-    const rules = [...safeJsonParse(visualBible?.negativeRules, [])];
+    const rules = [...safeJsonParse(visualImage?.negativeRules, [])];
     rules[idx] = value;
     updateNegativeRules(rules);
   };
 
   const removeNegativeRule = (idx: number) => {
-    const rules = safeJsonParse(visualBible?.negativeRules, []).filter((_: any, i: number) => i !== idx);
+    const rules = safeJsonParse(visualImage?.negativeRules, []).filter((_: any, i: number) => i !== idx);
     updateNegativeRules(rules);
   };
 
@@ -271,7 +278,7 @@ export default function VisualPage() {
     );
   }
 
-  if (!project || !visualBible) {
+  if (!project || !visualImage) {
     return (
       <div className="text-center py-20">
         <p className="text-muted-foreground">Project not found</p>
@@ -279,10 +286,10 @@ export default function VisualPage() {
     );
   }
 
-  const characters = safeJsonParse(visualBible.characters, []);
-  const environments = safeJsonParse(visualBible.environments, []);
-  const colorPalette = safeJsonParse(visualBible.colorPalette, []);
-  const negativeRules = safeJsonParse(visualBible.negativeRules, []);
+  const characters = safeJsonParse(visualImage.characters, []);
+  const environments = safeJsonParse(visualImage.environments, []);
+  const colorPalette = safeJsonParse(visualImage.colorPalette, []);
+  const negativeRules = safeJsonParse(visualImage.negativeRules, []);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -327,16 +334,15 @@ export default function VisualPage() {
           <CardContent>
             <div className="grid grid-cols-4 gap-2">
               {STYLE_OPTIONS.map((style) => {
-                const isSelected = visualBible.styleAnchorTokens?.toLowerCase().includes(style.id);
+                const isSelected = visualImage.styleAnchorTokens?.toLowerCase().includes(style.id);
                 return (
                   <button
                     key={style.id}
                     onClick={() => {
-                      setVisualBible({
-                        ...visualBible,
+                      autoSaveVisual({
+                        ...visualImage!,
                         styleAnchorTokens: `${style.id}, detailed illustration, high quality`
                       });
-                      setHasChanges(true);
                     }}
                     className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all ${
                       isSelected
@@ -362,7 +368,7 @@ export default function VisualPage() {
           <CardContent>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
               {FORMAT_OPTIONS.map((format) => {
-                const isSelected = (visualBible.aspectRatio || "16:9") === format.id;
+                const isSelected = (visualImage.aspectRatio || "16:9") === format.id;
                 const aspectStyle = format.id === "9:16" 
                   ? "aspect-[9/16]" 
                   : format.id === "16:9" 
@@ -377,9 +383,8 @@ export default function VisualPage() {
                   <button
                     key={format.id + format.label}
                     onClick={() => {
-                      if ((visualBible.aspectRatio || "16:9") !== format.id) {
-                        setVisualBible({ ...visualBible, aspectRatio: format.id });
-                        setHasChanges(true);
+                      if ((visualImage.aspectRatio || "16:9") !== format.id) {
+                        autoSaveVisual({ ...visualImage!, aspectRatio: format.id });
                       }
                     }}
                     className={`flex flex-col items-center gap-2 rounded-lg border-2 p-3 transition-all ${
@@ -522,9 +527,9 @@ export default function VisualPage() {
           </CardHeader>
           <CardContent>
             <Input
-              value={visualBible.cameraLanguage}
+              value={visualImage.cameraLanguage}
               onChange={(e) =>
-                setVisualBible({ ...visualBible, cameraLanguage: e.target.value })
+                setVisualImage({ ...visualImage, cameraLanguage: e.target.value })
               }
               placeholder="e.g., medium shot, close-up, wide angle..."
             />
