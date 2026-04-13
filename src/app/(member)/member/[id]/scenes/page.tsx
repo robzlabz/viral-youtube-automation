@@ -5,6 +5,14 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Scene {
   id: string;
@@ -21,6 +29,14 @@ function formatDuration(seconds: number | null): string {
   if (!seconds) return "—";
   return `${seconds.toFixed(2)}s`;
 }
+
+const DURATION_OPTIONS = [
+  { value: 5, label: "5 min", icon: "⚡" },
+  { value: 10, label: "10 min", icon: "⏱️" },
+  { value: 15, label: "15 min", icon: "🕐" },
+  { value: 30, label: "30 min", icon: "⏰" },
+  { value: 60, label: "1 hour", icon: "⏳" },
+];
 
 function getSceneStatusIcon(scene: Scene) {
   const voiceDone = !!scene.voiceFilePath;
@@ -42,12 +58,14 @@ function ScenesContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [project, setProject] = useState<{ id: string; title: string; scenes: Scene[] } | null>(null);
+  const [project, setProject] = useState<{ id: string; title: string; script: string | null; scenes: Scene[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingScene, setEditingScene] = useState<Scene | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedCount, setGeneratedCount] = useState(0);
   const [showBanner, setShowBanner] = useState(false);
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  const [regenerateDuration, setRegenerateDuration] = useState(10);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const hasStartedPollingRef = useRef(false);
 
@@ -154,6 +172,39 @@ function ScenesContent() {
     fetchProject();
   };
 
+  const handleRegenerateScenes = async () => {
+    if (!project?.script) return;
+
+    setShowRegenerateModal(false);
+    setShowBanner(true);
+    hasStartedPollingRef.current = false;
+
+    try {
+      const res = await fetch(`/api/projects/${params.id}/convert-script`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          script: project.script,
+          styleAnchorTokens: "",
+          characters: "[]",
+          environments: "[]",
+        }),
+      });
+
+      if (res.ok) {
+        setTimeout(() => startPolling(), 100);
+      } else {
+        setShowBanner(false);
+        const data = await res.json();
+        alert(data.error || "Failed to regenerate scenes");
+      }
+    } catch (err) {
+      console.error("Regenerate error:", err);
+      setShowBanner(false);
+    }
+  };
+
   const handleSaveScene = async () => {
     if (!editingScene) return;
     await fetch(`/api/projects/${params.id}/scenes/${editingScene.id}`, {
@@ -202,6 +253,15 @@ function ScenesContent() {
           </h1>
         </div>
         <div className="flex gap-2">
+          {project?.script && (
+            <Button
+              variant="outline"
+              onClick={() => setShowRegenerateModal(true)}
+              disabled={isGenerating}
+            >
+              🔄 Regenerate Scenes with AI
+            </Button>
+          )}
           <Button variant="outline" onClick={handleAddScene}>
             + Add Scene
           </Button>
@@ -342,6 +402,50 @@ function ScenesContent() {
           </div>
         </div>
       )}
+
+      {/* Regenerate Scenes Modal */}
+      <Dialog open={showRegenerateModal} onOpenChange={setShowRegenerateModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Regenerate Scenes with AI</DialogTitle>
+            <DialogDescription>
+              Select target duration to regenerate scenes from your script.
+              This will replace all existing scenes.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Target Duration</Label>
+              <div className="grid grid-cols-5 gap-2">
+                {DURATION_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setRegenerateDuration(opt.value)}
+                    className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${
+                      regenerateDuration === opt.value
+                        ? "border-primary bg-primary/10"
+                        : "border-border hover:border-primary/50"
+                    }`}
+                  >
+                    <span className="text-lg">{opt.icon}</span>
+                    <span className="text-xs font-medium">{opt.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRegenerateModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleRegenerateScenes}>
+              🔄 Regenerate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
