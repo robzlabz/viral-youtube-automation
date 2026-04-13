@@ -122,7 +122,7 @@ export default function VisualPage() {
     }
   };
 
-  const autoSaveVisual = async (updated: VisualImage) => {
+  const autoSaveVisual = async (updated: VisualImage, redirectToScript = false) => {
     setVisualImage(updated);
     try {
       await fetch(`/api/projects/${params.id}/visual`, {
@@ -131,6 +131,9 @@ export default function VisualPage() {
         credentials: "include",
         body: JSON.stringify(updated),
       });
+      if (redirectToScript) {
+        router.push(`/member/${params.id}/script?autoGenerate=true`);
+      }
     } catch (err) {
       console.error("Auto-save failed:", err);
     }
@@ -384,7 +387,7 @@ export default function VisualPage() {
                     key={format.id + format.label}
                     onClick={() => {
                       if ((visualImage.aspectRatio || "16:9") !== format.id) {
-                        autoSaveVisual({ ...visualImage!, aspectRatio: format.id });
+                        autoSaveVisual({ ...visualImage!, aspectRatio: format.id }, true);
                       }
                     }}
                     className={`flex flex-col items-center gap-2 rounded-lg border-2 p-3 transition-all ${

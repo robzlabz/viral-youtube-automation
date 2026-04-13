@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
@@ -59,6 +59,7 @@ const GENERATION_STEPS = [
 export default function ScriptEditorPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [project, setProject] = useState<Project | null>(null);
   const [script, setScript] = useState("");
   const [narrativeStyle, setNarrativeStyle] = useState("productivity");
@@ -83,6 +84,15 @@ export default function ScriptEditorPage() {
   useEffect(() => {
     fetchProject();
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("autoGenerate") === "true" && !loading && project) {
+      setGenerateTitle(project.title || "");
+      setGenerateDescription("");
+      setTargetDuration(10);
+      setShowGenerateModal(true);
+    }
+  }, [loading, project, searchParams]);
 
   const fetchProject = async () => {
     try {
